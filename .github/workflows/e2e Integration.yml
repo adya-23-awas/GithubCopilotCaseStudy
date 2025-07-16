@@ -6,12 +6,12 @@ on:
       - main
 
 jobs:
-  sonarqube-scan:
+  # 1. SonarQube scan runs first
+  sonar-scan:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up JDK 21
@@ -19,34 +19,35 @@ jobs:
         with:
           java-version: 21
           distribution: 'zulu'
-      - name: Run SonarQube Analysis
+      - name: SonarQube Analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.organization=copil-org -Dsonar.projectKey=copil-org_copilotprojcase
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.organization=CopilotOrg1 -Dsonar.projectKey=copilotorg-2
+
+  # 2. Snyk scan runs after SonarQube scan, even if SonarQube fails
   snyk-scan:
     name: Snyk Security Scan
-    needs: sonarqube-scan
-    if: always()
     runs-on: ubuntu-latest
+    needs: sonar-scan
+    if: always()
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Run Snyk Security Scan
+      - uses: actions/checkout@v4
+      - name: Snyk Security Scan
         uses: snyk/actions/maven@master
         continue-on-error: false
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
+  # 3. OWASP ZAP scan runs after Snyk scan, even if Snyk fails
   zap-scan:
     name: OWASP ZAP Scan
+    runs-on: ubuntu-latest
     needs: snyk-scan
     if: always()
-    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Run OWASP ZAP Scan
+      - uses: actions/checkout@v4
+      - name: OWASP ZAP Scan
         uses: zaproxy/action-baseline@v0.14.0
         with:
           target: 'https://www.zaproxy.org'
